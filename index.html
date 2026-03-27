@@ -1,0 +1,1033 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSV naar Excel Formatter - V4</title>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/exceljs@4.3.0/dist/exceljs.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100%;
+            width: 100%;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f5f5f5;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            background-color: white;
+            max-width: 1200px;
+            margin: 0 auto;
+            width: 100%;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+
+        .header {
+            padding: 15px 20px;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background-color: white;
+            flex-shrink: 0;
+            flex-wrap: wrap;
+        }
+
+        .header button {
+            padding: 10px 16px;
+            background-color: #e1e1e1;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            white-space: nowrap;
+            touch-action: manipulation;
+        }
+
+        .header button:hover {
+            background-color: #d4d4d4;
+        }
+
+        .header button:active {
+            transform: scale(0.98);
+        }
+
+        .header #fileInput {
+            display: none;
+        }
+
+        .filename {
+            color: gray;
+            font-size: 14px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            flex: 1;
+            min-width: 150px;
+        }
+
+        .filename.loaded {
+            color: #333;
+            font-weight: 500;
+        }
+
+        .main {
+            display: flex;
+            flex: 1;
+            gap: 10px;
+            padding: 10px;
+            overflow: hidden;
+        }
+
+        .panel {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            display: flex;
+            flex-direction: column;
+            background-color: #fafafa;
+            min-width: 0;
+        }
+
+        .panel-title {
+            background-color: #f0f0f0;
+            padding: 12px;
+            border-bottom: 1px solid #ddd;
+            font-weight: 600;
+            font-size: 13px;
+            text-transform: uppercase;
+            color: #555;
+            flex-shrink: 0;
+        }
+
+        .panel-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+        }
+
+        .left-panel, .right-panel {
+            flex: 1;
+            min-width: 200px;
+        }
+
+        .center-buttons {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 8px;
+            padding: 0 8px;
+            flex-shrink: 0;
+        }
+
+        .center-buttons button {
+            padding: 12px 10px;
+            background-color: white;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            white-space: nowrap;
+            touch-action: manipulation;
+            font-weight: 500;
+        }
+
+        .center-buttons button:hover {
+            background-color: #f5f5f5;
+            border-color: #999;
+        }
+
+        .center-buttons button:active {
+            transform: scale(0.95);
+        }
+
+        .column-item {
+            padding: 10px;
+            margin: 4px 0;
+            background-color: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            transition: all 0.2s;
+            touch-action: manipulation;
+        }
+
+        .column-item:active {
+            transform: scale(0.98);
+        }
+
+        .column-item:hover {
+            background-color: #f9f9f9;
+            border-color: #999;
+        }
+
+        .column-item.selected {
+            background-color: #e8f4f8;
+            border: 2px solid #4CAF50;
+            box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
+        }
+
+        .column-name {
+            font-weight: 600;
+            font-size: 13px;
+            color: #333;
+            word-break: break-word;
+        }
+
+        .column-sample {
+            font-size: 12px;
+            color: #888;
+            word-break: break-word;
+        }
+
+        .selected-item {
+            padding: 10px;
+            margin: 4px 0;
+            background-color: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            cursor: grab;
+            user-select: none;
+            font-size: 14px;
+            transition: all 0.2s;
+            touch-action: manipulation;
+        }
+
+        .selected-item:active {
+            cursor: grabbing;
+        }
+
+        .selected-item:hover {
+            background-color: #f0f0f0;
+            border-color: #999;
+        }
+
+        .selected-item.selected {
+            background-color: #e8f4f8;
+            border: 2px solid #4CAF50;
+            box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
+        }
+
+        .selected-item.dragging {
+            opacity: 0.6;
+            background-color: #e0e0e0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+
+        .footer {
+            padding: 15px 20px;
+            border-top: 1px solid #e0e0e0;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            background-color: white;
+            flex-shrink: 0;
+            flex-wrap: wrap;
+            justify-content: space-between;
+        }
+
+        .footer-presets {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .footer-presets label {
+            font-weight: 600;
+            font-size: 13px;
+            color: #555;
+            white-space: nowrap;
+        }
+
+        .footer-presets select {
+            padding: 8px 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 13px;
+            min-width: 150px;
+        }
+
+        .footer-presets button {
+            padding: 8px 14px;
+            background-color: white;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            white-space: nowrap;
+            touch-action: manipulation;
+            font-weight: 500;
+        }
+
+        .footer-presets button:hover {
+            background-color: #f5f5f5;
+            border-color: #999;
+        }
+
+        .footer-presets button.delete {
+            color: #d32f2f;
+        }
+
+        .footer-presets button.delete:hover {
+            background-color: #ffebee;
+        }
+
+        .convert-btn {
+            padding: 10px 24px;
+            background-color: #D7E4BC;
+            border: 1px solid #b8c99d;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            white-space: nowrap;
+            touch-action: manipulation;
+            transition: all 0.2s;
+        }
+
+        .convert-btn:hover:not(:disabled) {
+            background-color: #c8d9a8;
+            border-color: #a9c488;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .convert-btn:active:not(:disabled) {
+            transform: scale(0.98);
+        }
+
+        .convert-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Mobile responsiveness */
+        @media (max-width: 768px) {
+            .container {
+                height: auto;
+                min-height: 100vh;
+            }
+
+            .header {
+                padding: 12px 15px;
+                gap: 8px;
+            }
+
+            .header button {
+                padding: 8px 12px;
+                font-size: 13px;
+            }
+
+            .filename {
+                min-width: 120px;
+            }
+
+            .main {
+                flex-direction: column;
+                gap: 8px;
+                padding: 8px;
+            }
+
+            .left-panel, .right-panel {
+                min-height: 200px;
+                min-width: auto;
+            }
+
+            .center-buttons {
+                flex-direction: row;
+                justify-content: center;
+                order: -1;
+                gap: 6px;
+                padding: 0;
+                margin-bottom: 8px;
+            }
+
+            .center-buttons button {
+                padding: 8px 12px;
+                font-size: 12px;
+                flex: 1;
+            }
+
+            .panel-title {
+                padding: 10px;
+                font-size: 12px;
+            }
+
+            .panel-content {
+                padding: 6px;
+            }
+
+            .column-item, .selected-item {
+                padding: 8px;
+                margin: 3px 0;
+                font-size: 13px;
+            }
+
+            .footer {
+                padding: 12px 15px;
+                gap: 8px;
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .footer-presets {
+                gap: 6px;
+            }
+
+            .footer-presets select {
+                min-width: 100%;
+                padding: 10px;
+            }
+
+            .footer-presets button {
+                padding: 10px;
+                flex: 1;
+                font-size: 12px;
+            }
+
+            .convert-btn {
+                padding: 12px 16px;
+                width: 100%;
+                font-size: 14px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .container {
+                height: auto;
+                min-height: 100vh;
+            }
+
+            .header {
+                padding: 10px 12px;
+                gap: 6px;
+            }
+
+            .header button {
+                padding: 8px 10px;
+                font-size: 12px;
+                flex: 1;
+            }
+
+            .filename {
+                font-size: 12px;
+                min-width: auto;
+            }
+
+            .main {
+                padding: 6px;
+            }
+
+            .center-buttons {
+                gap: 4px;
+                margin-bottom: 6px;
+            }
+
+            .center-buttons button {
+                padding: 8px 10px;
+                font-size: 11px;
+            }
+
+            .column-item, .selected-item {
+                padding: 8px;
+                font-size: 12px;
+            }
+
+            .column-name {
+                font-size: 12px;
+            }
+
+            .column-sample {
+                font-size: 11px;
+            }
+
+            .footer {
+                padding: 10px 12px;
+                gap: 6px;
+            }
+
+            .footer-presets label {
+                font-size: 12px;
+            }
+
+            .footer-presets select {
+                font-size: 12px;
+                padding: 8px;
+            }
+
+            .footer-presets button {
+                font-size: 11px;
+                padding: 8px;
+            }
+
+            .convert-btn {
+                font-size: 13px;
+                padding: 10px 12px;
+            }
+        }
+
+        /* Smooth scrolling */
+        .panel-content {
+            scroll-behavior: smooth;
+        }
+
+        /* Remove tap delay on touch devices */
+        button, select, input {
+            -webkit-tap-highlight-color: transparent;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <button id="loadBtn">Select CSV File</button>
+            <span class="filename" id="filename">No file selected</span>
+            <input type="file" id="fileInput" accept=".csv">
+        </div>
+
+        <div class="main">
+            <div class="panel left-panel">
+                <div class="panel-title">Available Columns</div>
+                <div class="panel-content" id="availableColumns"></div>
+            </div>
+
+            <div class="center-buttons">
+                <button id="addBtn">Add →</button>
+                <button id="removeBtn">← Remove</button>
+            </div>
+
+            <div class="panel right-panel">
+                <div class="panel-title">Selected Columns (drag to sort)</div>
+                <div class="panel-content" id="selectedColumns"></div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <div class="footer-presets">
+                <label>Presets:</label>
+                <select id="presetSelect"></select>
+                <button id="loadPresetBtn">Load</button>
+                <button id="savePresetBtn">Save as...</button>
+                <button id="deletePresetBtn" class="delete">Delete</button>
+            </div>
+            <button class="convert-btn" id="convertBtn" disabled>Create Excel File</button>
+        </div>
+    </div>
+
+    <script>
+        // Default presets from config
+        const DEFAULT_PRESETS = {
+            "Leverancier v2": ["GMM", "Item", "Aantal", "Eenheid", "Type", "Afmeting", "Opties", "Zone linked", "Leverancier", "IN", "OUT"],
+            "Planning": ["Leverancier", "Description", "IN/OUT", "Start Day", "End Day"]
+        };
+
+        class CSVFormatter {
+            constructor() {
+                this.df = null;
+                this.allColumns = [];
+                this.selectedColumns = [];
+                this.colSamples = {};
+                this.presets = { ...DEFAULT_PRESETS };
+                this.draggedIndex = null;
+                this.csvFileDate = null;
+                this.constantColumn = null; // { name: 'ColumnName', value: 'ConstantValue' }
+
+                // Get elements
+                this.loadBtn = document.getElementById('loadBtn');
+                this.fileInput = document.getElementById('fileInput');
+                this.filenameSpan = document.getElementById('filename');
+                this.availableDiv = document.getElementById('availableColumns');
+                this.selectedDiv = document.getElementById('selectedColumns');
+                this.addBtn = document.getElementById('addBtn');
+                this.removeBtn = document.getElementById('removeBtn');
+                this.convertBtn = document.getElementById('convertBtn');
+                this.presetSelect = document.getElementById('presetSelect');
+                this.loadPresetBtn = document.getElementById('loadPresetBtn');
+                this.savePresetBtn = document.getElementById('savePresetBtn');
+                this.deletePresetBtn = document.getElementById('deletePresetBtn');
+
+                // Load saved presets from localStorage and merge with defaults
+                this.loadPresetsFromStorage();
+
+                // Setup UI
+                this.updatePresetMenu();
+                this.attachEventListeners();
+            }
+
+            loadPresetsFromStorage() {
+                try {
+                    const stored = localStorage.getItem('csvFormatterPresets');
+                    if (stored) {
+                        const customPresets = JSON.parse(stored);
+                        this.presets = { ...this.presets, ...customPresets };
+                    }
+                } catch (e) {
+                    console.log('Could not load presets from storage');
+                }
+            }
+
+            attachEventListeners() {
+                // File button
+                this.loadBtn.onclick = () => {
+                    this.fileInput.click();
+                };
+
+                // File input change
+                this.fileInput.onchange = (e) => this.loadCSV(e);
+
+                // Add/Remove buttons
+                this.addBtn.onclick = () => this.addColumns();
+                this.removeBtn.onclick = () => this.removeColumns();
+
+                // Convert button
+                this.convertBtn.onclick = () => this.convertToExcel();
+
+                // Preset buttons
+                this.loadPresetBtn.onclick = () => this.applyPreset();
+                this.savePresetBtn.onclick = () => this.savePreset();
+                this.deletePresetBtn.onclick = () => this.deletePreset();
+            }
+
+            loadCSV(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                // Extract date from filename (e.g., AppSheet.ViewData.2026-01-20.csv)
+                const dateMatch = file.name.match(/(\d{4})-(\d{2})-(\d{2})/);
+                if (dateMatch) {
+                    const [, year, month, day] = dateMatch;
+                    this.csvFileDate = new Date(year, month - 1, day); // month is 0-indexed
+                } else {
+                    // Fallback to current date
+                    this.csvFileDate = new Date();
+                }
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const content = e.target.result;
+                        let parseResult;
+
+                        // Try different delimiters
+                        const delimiters = [';', ',', '\t'];
+                        let parsed = null;
+
+                        for (const delim of delimiters) {
+                            parseResult = Papa.parse(content, {
+                                header: true,
+                                dynamicTyping: false,
+                                delimiter: delim,
+                                skipEmptyLines: true
+                            });
+
+                            if (parseResult.meta.fields && parseResult.meta.fields.length > 0 && parseResult.data.length > 0) {
+                                parsed = parseResult;
+                                break;
+                            }
+                        }
+
+                        if (!parsed) {
+                            throw new Error('Could not parse CSV - no valid columns or data found');
+                        }
+
+                        this.df = parsed.data.filter(row => {
+                            return Object.values(row).some(val => val && val.toString().trim() !== '');
+                        });
+
+                        this.allColumns = parsed.meta.fields || [];
+                        this.selectedColumns = [];
+                        this.colSamples = {};
+
+                        if (this.df.length === 0) {
+                            throw new Error('No data found in CSV');
+                        }
+
+                        // Generate samples
+                        for (const col of this.allColumns) {
+                            for (const row of this.df) {
+                                const val = row[col];
+                                if (val && val.toString().trim() !== '') {
+                                    let sample = val.toString();
+                                    if (sample.length > 50) sample = sample.substring(0, 47) + '...';
+                                    this.colSamples[col] = sample;
+                                    break;
+                                }
+                            }
+                            if (!this.colSamples[col]) this.colSamples[col] = '';
+                        }
+
+                        this.filenameSpan.textContent = file.name;
+                        this.filenameSpan.classList.add('loaded');
+                        this.findConstantColumn();
+                        this.updateLists();
+                        this.convertBtn.disabled = false;
+                    } catch (error) {
+                        alert('Error reading file: ' + error.message);
+                    }
+                };
+                reader.onerror = () => {
+                    alert('Error reading file');
+                };
+                reader.readAsText(file);
+
+                // Reset input
+                this.fileInput.value = '';
+            }
+
+            updateLists() {
+                // Update available columns
+                this.availableDiv.innerHTML = '';
+                const availableCols = this.allColumns.filter(col => !this.selectedColumns.includes(col));
+
+                for (const col of availableCols) {
+                    const item = document.createElement('div');
+                    item.className = 'column-item';
+                    item.innerHTML = `
+                        <div class="column-name">${this.escapeHtml(col)}</div>
+                        <div class="column-sample">${this.escapeHtml(this.colSamples[col])}</div>
+                    `;
+                    item.onclick = () => {
+                        item.classList.toggle('selected');
+                    };
+                    this.availableDiv.appendChild(item);
+                }
+
+                // Update selected columns
+                this.selectedDiv.innerHTML = '';
+                for (let i = 0; i < this.selectedColumns.length; i++) {
+                    const col = this.selectedColumns[i];
+                    const item = document.createElement('div');
+                    item.className = 'selected-item';
+                    item.textContent = col;
+                    item.draggable = true;
+                    item.dataset.index = i;
+
+                    item.ondragstart = (e) => {
+                        this.draggedIndex = i;
+                        item.classList.add('dragging');
+                    };
+                    item.ondragend = () => {
+                        item.classList.remove('dragging');
+                    };
+                    item.ondragover = (e) => {
+                        e.preventDefault();
+                        e.dataTransfer.dropEffect = 'move';
+                    };
+                    item.ondrop = (e) => {
+                        e.preventDefault();
+                        const newIndex = i;
+                        if (this.draggedIndex !== null && this.draggedIndex !== newIndex) {
+                            const [moved] = this.selectedColumns.splice(this.draggedIndex, 1);
+                            this.selectedColumns.splice(newIndex, 0, moved);
+                            this.updateLists();
+                        }
+                    };
+
+                    // Allow clicking to select/deselect for removal
+                    item.onclick = () => {
+                        item.classList.toggle('selected');
+                    };
+
+                    this.selectedDiv.appendChild(item);
+                }
+            }
+
+            addColumns() {
+                const selected = this.availableDiv.querySelectorAll('.column-item.selected');
+                if (selected.length === 0) {
+                    alert('Select columns from the left panel first');
+                    return;
+                }
+
+                // Add selected columns to selectedColumns
+                for (const item of selected) {
+                    const colName = item.querySelector('.column-name').textContent;
+                    if (!this.selectedColumns.includes(colName)) {
+                        this.selectedColumns.push(colName);
+                    }
+                }
+
+                // Clear selection and update
+                this.updateLists();
+            }
+
+            removeColumns() {
+                const selected = this.selectedDiv.querySelectorAll('.selected-item.selected');
+                if (selected.length === 0) {
+                    alert('Click columns in the right panel to select them, then click Remove');
+                    return;
+                }
+
+                // Get indices and remove in reverse order to maintain correct indices
+                const indicesToRemove = [];
+                selected.forEach(item => {
+                    const idx = parseInt(item.dataset.index);
+                    if (!isNaN(idx)) {
+                        indicesToRemove.push(idx);
+                    }
+                });
+
+                // Sort in descending order and remove
+                indicesToRemove.sort((a, b) => b - a);
+                for (const idx of indicesToRemove) {
+                    this.selectedColumns.splice(idx, 1);
+                }
+
+                this.updateLists();
+            }
+
+            findConstantColumn() {
+                // Find columns where all rows have the same value
+                this.constantColumn = null;
+
+                if (!this.df || this.df.length === 0) return;
+
+                // Check each column
+                for (const colName of this.allColumns) {
+                    const values = this.df.map(row => row[colName]);
+
+                    // Skip empty columns
+                    const nonEmptyValues = values.filter(val => val !== null && val !== undefined && String(val).trim() !== '');
+                    if (nonEmptyValues.length === 0) continue;
+
+                    // Check if all non-empty values are the same
+                    const firstValue = nonEmptyValues[0];
+                    const allSame = nonEmptyValues.every(val => val === firstValue);
+
+                    if (allSame && nonEmptyValues.length === this.df.length) {
+                        // All rows have the same value in this column
+                        this.constantColumn = {
+                            name: colName,
+                            value: String(firstValue).trim()
+                        };
+                        break; // Use the first constant column found
+                    }
+                }
+            }
+
+            async convertToExcel() {
+                if (this.selectedColumns.length === 0) {
+                    alert('No columns selected.');
+                    return;
+                }
+
+                if (typeof ExcelJS === 'undefined') {
+                    alert('Error: Excel library not loaded. Please refresh the page.');
+                    return;
+                }
+
+                try {
+                    const workbook = new ExcelJS.Workbook();
+                    const worksheet = workbook.addWorksheet('Sheet1');
+
+                    // Find constant column among SELECTED columns only
+                    let constantColumn = null;
+                    for (const colName of this.selectedColumns) {
+                        const values = this.df.map(row => row[colName]);
+                        const nonEmptyValues = values.filter(val => val !== null && val !== undefined && String(val).trim() !== '');
+
+                        if (nonEmptyValues.length > 0) {
+                            const firstValue = nonEmptyValues[0];
+                            const allSame = nonEmptyValues.every(val => val === firstValue);
+
+                            if (allSame && nonEmptyValues.length === this.df.length) {
+                                constantColumn = {
+                                    name: colName,
+                                    value: String(firstValue).trim()
+                                };
+                                break; // Use the first constant column found
+                            }
+                        }
+                    }
+
+                    // Check if "Link" column exists
+                    const hasLinkColumn = 'Link' in this.df[0];
+
+                    // Header formatting
+                    const headerStyle = {
+                        font: { bold: true, color: { argb: 'FF000000' } },
+                        fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD7E4BC' } },
+                        alignment: { wrapText: true, vertical: 'top' }
+                    };
+
+                    // Add header row
+                    const headerRow = worksheet.addRow(this.selectedColumns);
+                    headerRow.eachCell((cell) => {
+                        cell.style = headerStyle;
+                    });
+
+                    // Add data rows
+                    for (let i = 0; i < this.df.length; i++) {
+                        const rowData = [];
+                        for (const col of this.selectedColumns) {
+                            rowData.push(this.df[i][col] || '');
+                        }
+
+                        const row = worksheet.addRow(rowData);
+
+                        // Apply link formatting if row has Link value
+                        if (hasLinkColumn) {
+                            const linkVal = this.df[i]['Link'];
+                            if (linkVal && String(linkVal).trim()) {
+                                row.eachCell((cell) => {
+                                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } };
+                                    cell.font = { color: { argb: 'FF555555' } };
+                                });
+                            }
+                        }
+                    }
+
+                    // Set column widths
+                    for (let col = 0; col < this.selectedColumns.length; col++) {
+                        let maxLen = this.selectedColumns[col].length;
+                        for (const row of this.df) {
+                            const val = (row[this.selectedColumns[col]] || '').toString();
+                            maxLen = Math.max(maxLen, val.length);
+                        }
+                        worksheet.columns[col].width = Math.min(maxLen + 2, 60);
+                    }
+
+                    // Generate filename: GMM26 - ColumnName - Value - DDMMYYYY.xlsx
+                    // Or: GMM26 - PresetName - DDMMYYYY.xlsx if no constant column
+                    const fileDate = this.csvFileDate || new Date();
+                    const year = fileDate.getFullYear().toString().slice(-2); // Get last 2 digits of year
+                    const day = String(fileDate.getDate()).padStart(2, '0');
+                    const month = String(fileDate.getMonth() + 1).padStart(2, '0');
+                    const fullYear = fileDate.getFullYear();
+
+                    let filename;
+                    if (constantColumn) {
+                        // Use constant column name and value
+                        filename = `GMM${year} - ${constantColumn.name} - ${constantColumn.value} - ${day}${month}${fullYear}.xlsx`;
+                    } else {
+                        // Use preset name
+                        const presetName = this.presetSelect.value || 'Export';
+                        filename = `GMM${year} - ${presetName} - ${day}${month}${fullYear}.xlsx`;
+                    }
+
+                    // Write file
+                    const buffer = await workbook.xlsx.writeBuffer();
+                    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                    const url = window.URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = filename;
+                    link.click();
+                    window.URL.revokeObjectURL(url);
+
+                    alert(`Excel file "${filename}" created successfully!`);
+                } catch (error) {
+                    alert('Error creating Excel: ' + error.message);
+                }
+            }
+
+            updatePresetMenu() {
+                this.presetSelect.innerHTML = '';
+                const presetNames = Object.keys(this.presets);
+
+                if (presetNames.length === 0) {
+                    const option = document.createElement('option');
+                    option.text = '(no presets)';
+                    this.presetSelect.appendChild(option);
+                    return;
+                }
+
+                for (const name of presetNames) {
+                    const option = document.createElement('option');
+                    option.value = name;
+                    option.textContent = name;
+                    this.presetSelect.appendChild(option);
+                }
+            }
+
+            savePreset() {
+                if (this.selectedColumns.length === 0) {
+                    alert('Select columns first.');
+                    return;
+                }
+                const name = prompt('Preset name:');
+                if (name) {
+                    this.presets[name] = [...this.selectedColumns];
+                    localStorage.setItem('csvFormatterPresets', JSON.stringify(this.presets));
+                    this.updatePresetMenu();
+                    this.presetSelect.value = name;
+                }
+            }
+
+            applyPreset() {
+                const name = this.presetSelect.value;
+                if (!name) {
+                    alert('Please select a preset');
+                    return;
+                }
+
+                if (!this.presets[name]) {
+                    alert('Preset not found');
+                    return;
+                }
+
+                const presetCols = this.presets[name];
+                const validCols = presetCols.filter(col => this.allColumns.includes(col));
+                const missingCols = presetCols.filter(col => !this.allColumns.includes(col));
+
+                if (missingCols.length > 0) {
+                    alert(`Note: These columns from the preset don't exist in the CSV:\n${missingCols.join(', ')}\n\nLoading available columns: ${validCols.join(', ')}`);
+                }
+
+                if (validCols.length === 0) {
+                    alert('None of the preset columns were found in the CSV file');
+                    return;
+                }
+
+                this.selectedColumns = validCols;
+                this.updateLists();
+            }
+
+            deletePreset() {
+                const name = this.presetSelect.value;
+                if (name && this.presets[name]) {
+                    delete this.presets[name];
+                    localStorage.setItem('csvFormatterPresets', JSON.stringify(this.presets));
+                    this.updatePresetMenu();
+                }
+            }
+
+            escapeHtml(text) {
+                const map = {
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;',
+                    "'": '&#039;'
+                };
+                return text.replace(/[&<>"']/g, m => map[m]);
+            }
+        }
+
+        // Initialize when DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+                window.csvApp = new CSVFormatter();
+            });
+        } else {
+            window.csvApp = new CSVFormatter();
+        }
+    </script>
+</body>
+</html>
