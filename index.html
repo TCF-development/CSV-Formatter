@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CSV naar Excel Formatter - V5</title>
+    <title>CSV naar Excel Formatter - V4</title>
     <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/exceljs@4.3.0/dist/exceljs.min.js"></script>
     <style>
@@ -898,21 +898,35 @@
                     for (let i = 0; i < this.df.length; i++) {
                         const rowData = [];
                         for (const col of this.selectedColumns) {
-                            rowData.push(this.df[i][col] || '');
+                            const value = this.df[i][col] || '';
+                            rowData.push(value);
                         }
 
                         const row = worksheet.addRow(rowData);
 
-                        // Apply link formatting if row has Link value
-                        if (hasLinkColumn) {
-                            const linkVal = this.df[i]['Link'];
-                            if (linkVal && String(linkVal).trim()) {
-                                row.eachCell((cell) => {
+                        // Apply formatting to cells
+                        row.eachCell((cell, colNum) => {
+                            const colName = this.selectedColumns[colNum - 1];
+                            const value = this.df[i][colName];
+
+                            // Try to parse and format dates
+                            if (value && String(value).trim()) {
+                                const parsedDate = this.parseDate(String(value));
+                                if (parsedDate) {
+                                    cell.value = parsedDate;
+                                    cell.numFmt = 'dd/mm/yyyy';
+                                }
+                            }
+
+                            // Apply link formatting if row has Link value
+                            if (hasLinkColumn) {
+                                const linkVal = this.df[i]['Link'];
+                                if (linkVal && String(linkVal).trim()) {
                                     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } };
                                     cell.font = { color: { argb: 'FF555555' } };
-                                });
+                                }
                             }
-                        }
+                        });
                     }
 
                     // Set column widths
@@ -1138,6 +1152,61 @@
                 content.appendChild(buttonContainer);
                 modal.appendChild(content);
                 document.body.appendChild(modal);
+            }
+
+            parseDate(dateString) {
+                if (!dateString || typeof dateString !== 'string') return null;
+
+                const str = dateString.trim();
+                if (!str) return null;
+
+                let date = null;
+
+                // ISO format: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS
+                const isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+                if (isoMatch) {
+                    date = new Date(isoMatch[1], parseInt(isoMatch[2]) - 1, isoMatch[3]);
+                    if (!isNaN(date)) return date;
+                }
+
+                // European format: DD/MM/YYYY or DD-MM-YYYY
+                const euMatch = str.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);
+                if (euMatch) {
+                    date = new Date(euMatch[3], parseInt(euMatch[2]) - 1, euMatch[1]);
+                    if (!isNaN(date)) return date;
+                }
+
+                // US format: MM/DD/YYYY
+                const usMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+                if (usMatch) {
+                    const day = parseInt(usMatch[2]);
+                    const month = parseInt(usMatch[1]);
+                    // Only treat as US format if month > 12, otherwise it's ambiguous
+                    if (month > 12 || day <= 12) {
+                        date = new Date(usMatch[3], month - 1, day);
+                        if (!isNaN(date)) return date;
+                    }
+                }
+
+                // Format: "DD Month YYYY" or "DD Month, YYYY"
+                const monthNames = ['january', 'february', 'march', 'april', 'may', 'june',
+                    'july', 'august', 'september', 'october', 'november', 'december'];
+                const monthMatch = str.match(/(\d{1,2})\s+([a-z]+)\s+(\d{4})/i);
+                if (monthMatch) {
+                    const monthIndex = monthNames.findIndex(m => m.startsWith(monthMatch[2].toLowerCase()));
+                    if (monthIndex !== -1) {
+                        date = new Date(monthMatch[3], monthIndex, monthMatch[1]);
+                        if (!isNaN(date)) return date;
+                    }
+                }
+
+                // Try native Date parsing as last resort
+                date = new Date(str);
+                if (!isNaN(date) && date.getFullYear() > 1900 && date.getFullYear() < 2100) {
+                    return date;
+                }
+
+                return null;
             }
 
             escapeHtml(text) {
