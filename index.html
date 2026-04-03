@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CSV naar Excel Formatter - V4</title>
+    <title>CSV naar Excel Formatter - V5</title>
     <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/exceljs@4.3.0/dist/exceljs.min.js"></script>
     <style>
@@ -1043,37 +1043,101 @@
 
                 const jsonString = JSON.stringify(exportData, null, 2);
 
-                // Create a text area to display the JSON
+                // Try to copy to clipboard using modern API
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(jsonString).then(() => {
+                        alert(`Preset "${name}" copied to clipboard!\n\nPaste this into the presets.json file.`);
+                    }).catch(err => {
+                        // Fallback if clipboard fails
+                        this.showExportDialog(jsonString, name);
+                    });
+                } else {
+                    // Fallback for older browsers
+                    this.showExportDialog(jsonString, name);
+                }
+            }
+
+            showExportDialog(jsonString, presetName) {
+                // Create a modal dialog to display the JSON
+                const modal = document.createElement('div');
+                modal.style.position = 'fixed';
+                modal.style.top = '0';
+                modal.style.left = '0';
+                modal.style.width = '100%';
+                modal.style.height = '100%';
+                modal.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+                modal.style.display = 'flex';
+                modal.style.alignItems = 'center';
+                modal.style.justifyContent = 'center';
+                modal.style.zIndex = '10000';
+
+                const content = document.createElement('div');
+                content.style.backgroundColor = 'white';
+                content.style.padding = '20px';
+                content.style.borderRadius = '8px';
+                content.style.width = '90%';
+                content.style.maxWidth = '600px';
+                content.style.boxShadow = '0 4px 20px rgba(0,0,0,0.2)';
+
+                const title = document.createElement('h3');
+                title.textContent = `Export Preset: ${presetName}`;
+                title.style.marginTop = '0';
+                title.style.marginBottom = '10px';
+
                 const textarea = document.createElement('textarea');
                 textarea.value = jsonString;
-                textarea.style.position = 'fixed';
-                textarea.style.top = '50%';
-                textarea.style.left = '50%';
-                textarea.style.transform = 'translate(-50%, -50%)';
-                textarea.style.width = '500px';
-                textarea.style.height = '300px';
+                textarea.style.width = '100%';
+                textarea.style.height = '250px';
                 textarea.style.padding = '10px';
                 textarea.style.fontSize = '12px';
                 textarea.style.fontFamily = 'monospace';
-                textarea.style.border = '2px solid #ccc';
+                textarea.style.border = '1px solid #ccc';
                 textarea.style.borderRadius = '4px';
-                textarea.style.backgroundColor = 'white';
-                textarea.style.zIndex = '10000';
-                textarea.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
+                textarea.style.boxSizing = 'border-box';
                 textarea.readOnly = true;
-                textarea.select();
 
-                document.body.appendChild(textarea);
+                const buttonContainer = document.createElement('div');
+                buttonContainer.style.marginTop = '15px';
+                buttonContainer.style.display = 'flex';
+                buttonContainer.style.gap = '10px';
+                buttonContainer.style.justifyContent = 'flex-end';
 
-                // Copy to clipboard
-                try {
-                    document.execCommand('copy');
-                    alert(`Preset "${name}" copied to clipboard!\n\nPaste this into the presets.json file.`);
-                } catch (err) {
-                    alert('Failed to copy. Here is your preset JSON:\n\n' + jsonString);
-                }
+                const copyBtn = document.createElement('button');
+                copyBtn.textContent = 'Copy to Clipboard';
+                copyBtn.style.padding = '8px 16px';
+                copyBtn.style.backgroundColor = '#D7E4BC';
+                copyBtn.style.border = '1px solid #b8c99d';
+                copyBtn.style.borderRadius = '4px';
+                copyBtn.style.cursor = 'pointer';
+                copyBtn.onclick = () => {
+                    textarea.select();
+                    navigator.clipboard.writeText(jsonString).then(() => {
+                        copyBtn.textContent = 'Copied!';
+                        setTimeout(() => {
+                            modal.remove();
+                        }, 1000);
+                    });
+                };
 
-                document.body.removeChild(textarea);
+                const closeBtn = document.createElement('button');
+                closeBtn.textContent = 'Close';
+                closeBtn.style.padding = '8px 16px';
+                closeBtn.style.backgroundColor = '#e1e1e1';
+                closeBtn.style.border = '1px solid #ccc';
+                closeBtn.style.borderRadius = '4px';
+                closeBtn.style.cursor = 'pointer';
+                closeBtn.onclick = () => {
+                    modal.remove();
+                };
+
+                buttonContainer.appendChild(copyBtn);
+                buttonContainer.appendChild(closeBtn);
+
+                content.appendChild(title);
+                content.appendChild(textarea);
+                content.appendChild(buttonContainer);
+                modal.appendChild(content);
+                document.body.appendChild(modal);
             }
 
             escapeHtml(text) {
