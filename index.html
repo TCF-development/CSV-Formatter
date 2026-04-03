@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CSV naar Excel Formatter</title>
+    <title>CSV naar Excel Formatter - V4</title>
     <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/exceljs@4.3.0/dist/exceljs.min.js"></script>
     <style>
@@ -491,33 +491,6 @@
         button, select, input {
             -webkit-tap-highlight-color: transparent;
         }
-
-        /* Toast notifications */
-        .toast {
-            position: fixed;
-            bottom: 24px;
-            left: 50%;
-            transform: translateX(-50%) translateY(0);
-            padding: 9px 18px;
-            border-radius: 4px;
-            font-size: 13px;
-            color: white;
-            z-index: 2000;
-            pointer-events: none;
-            white-space: nowrap;
-            animation: toastFade 3s ease forwards;
-        }
-
-        .toast-success { background: #4caf50; }
-        .toast-warn    { background: #f57c00; }
-        .toast-error   { background: #d32f2f; }
-
-        @keyframes toastFade {
-            0%   { opacity: 0; transform: translateX(-50%) translateY(8px); }
-            12%  { opacity: 1; transform: translateX(-50%) translateY(0); }
-            75%  { opacity: 1; }
-            100% { opacity: 0; }
-        }
     </style>
 </head>
 <body>
@@ -558,10 +531,6 @@
     </div>
 
     <script>
-        // ── Vercel API Sync config ────────────────────────────────────────────
-        const API_URL = 'https://csv-formatter.vercel.app/api/presets';
-        // ────────────────────────────────────────────────────────────────────
-
         class CSVFormatter {
             constructor() {
                 this.df = null;
@@ -587,26 +556,41 @@
                 this.savePresetBtn = document.getElementById('savePresetBtn');
                 this.deletePresetBtn = document.getElementById('deletePresetBtn');
 
-                // Load shared presets from presets.json (async), then setup UI
-                this.fetchSharedPresets().then(() => {
-                    this.updatePresetMenu();
-                });
+                // Initialize asynchronously
+                this.init();
+            }
+
+            async init() {
+                // Load presets from JSON file and localStorage
+                await this.loadPresetsFromFile();
+                this.loadPresetsFromStorage();
+
+                // Setup UI
+                this.updatePresetMenu();
                 this.attachEventListeners();
             }
 
-            async fetchSharedPresets() {
+            async loadPresetsFromFile() {
                 try {
-                    const resp = await fetch(API_URL);
-                    if (!resp.ok) throw new Error('fetch failed');
-                    const data = await resp.json();
-                    this.presets = data;
-                    localStorage.setItem('csvFormatterPresetsCache', JSON.stringify(data));
+                    const response = await fetch('./presets.json');
+                    if (response.ok) {
+                        const filePresets = await response.json();
+                        this.presets = { ...filePresets };
+                    }
                 } catch (e) {
-                    // Fallback to last cached version
-                    try {
-                        const cached = localStorage.getItem('csvFormatterPresetsCache');
-                        if (cached) this.presets = JSON.parse(cached);
-                    } catch (e2) {}
+                    console.log('Could not load presets from file:', e);
+                }
+            }
+
+            loadPresetsFromStorage() {
+                try {
+                    const stored = localStorage.getItem('csvFormatterPresets');
+                    if (stored) {
+                        const customPresets = JSON.parse(stored);
+                        this.presets = { ...this.presets, ...customPresets };
+                    }
+                } catch (e) {
+                    console.log('Could not load presets from storage');
                 }
             }
 
@@ -630,7 +614,6 @@
                 this.loadPresetBtn.onclick = () => this.applyPreset();
                 this.savePresetBtn.onclick = () => this.savePreset();
                 this.deletePresetBtn.onclick = () => this.deletePreset();
-
             }
 
             loadCSV(event) {
@@ -985,23 +968,17 @@
                 }
             }
 
-            async savePreset() {
+            savePreset() {
                 if (this.selectedColumns.length === 0) {
                     alert('Select columns first.');
                     return;
                 }
-
                 const name = prompt('Preset name:');
-                if (!name) return;
-
-                const success = await this.syncPresetToAPI('save', name, this.selectedColumns);
-                if (success) {
-                    this.presets[name] = this.selectedColumns;
+                if (name) {
+                    this.presets[name] = [...this.selectedColumns];
+                    localStorage.setItem('csvFormatterPresets', JSON.stringify(this.presets));
                     this.updatePresetMenu();
                     this.presetSelect.value = name;
-                    this.showToast('✓ Preset saved');
-                } else {
-                    alert('Could not save preset - sync failed');
                 }
             }
 
@@ -1034,46 +1011,13 @@
                 this.updateLists();
             }
 
-            async deletePreset() {
+            deletePreset() {
                 const name = this.presetSelect.value;
-                if (!name || !this.presets[name]) return;
-
-                const success = await this.syncPresetToAPI('delete', name);
-                if (success) {
+                if (name && this.presets[name]) {
                     delete this.presets[name];
+                    localStorage.setItem('csvFormatterPresets', JSON.stringify(this.presets));
                     this.updatePresetMenu();
-                    this.showToast('✓ Preset deleted');
-                } else {
-                    alert('Could not delete preset - sync failed');
                 }
-            }
-
-            async syncPresetToAPI(action, name, columns = null) {
-                try {
-                    const resp = await fetch(API_URL, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            action,
-                            name,
-                            columns
-                        })
-                    });
-
-                    if (!resp.ok) throw new Error(`API failed: ${resp.status}`);
-                    const result = await resp.json();
-                    return result.success || false;
-                } catch (e) {
-                    return false;
-                }
-            }
-
-            showToast(message, type = 'success') {
-                const toast = document.createElement('div');
-                toast.className = `toast toast-${type}`;
-                toast.textContent = message;
-                document.body.appendChild(toast);
-                setTimeout(() => toast.remove(), 3100);
             }
 
             escapeHtml(text) {
