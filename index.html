@@ -558,14 +558,8 @@
     </div>
 
     <script>
-        // ── GitHub Sync config ────────────────────────────────────────────────
-        // Fine-grained token with read/write access to presets.json only
-        const GITHUB_CONFIG = {
-            owner:  'TCF-development',
-            repo:   'CSV-Formatter',
-            branch: 'main',
-            token:  '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'
-        };
+        // ── Google Apps Script Sync config ────────────────────────────────────
+        const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/d/AKfycbz4xcU0PBUWeUicq5YbS-6V02So9Az-vPho0R6DFz3OZe6Pn-80mFICiyCDbby6Ic0VHQ/useless';
         // ─────────────────────────────────────────────────────────────────────
 
         class CSVFormatter {
@@ -602,7 +596,7 @@
 
             async fetchSharedPresets() {
                 try {
-                    const resp = await fetch('./presets.json?_=' + Date.now());
+                    const resp = await fetch(GOOGLE_APPS_SCRIPT_URL + '?action=list');
                     if (!resp.ok) throw new Error('fetch failed');
                     const data = await resp.json();
                     this.presets = data;
@@ -999,16 +993,27 @@
                 const name = prompt('Preset name:');
                 if (!name) return;
 
-                // Attempt to push to GitHub first
-                const newPresets = { ...this.presets, [name]: [...this.selectedColumns] };
-                const pushed = await this.pushPresetsToGitHub(newPresets);
-                if (pushed) {
-                    this.presets = newPresets;
-                    this.updatePresetMenu();
-                    this.presetSelect.value = name;
-                    this.showToast('✓ Preset saved');
-                } else {
-                    alert('Could not save preset - repository sync failed');
+                try {
+                    const resp = await fetch(GOOGLE_APPS_SCRIPT_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            action: 'save',
+                            name: name,
+                            columns: this.selectedColumns
+                        })
+                    });
+                    const result = await resp.json();
+                    if (result.success) {
+                        this.presets[name] = this.selectedColumns;
+                        this.updatePresetMenu();
+                        this.presetSelect.value = name;
+                        this.showToast('✓ Preset saved');
+                    } else {
+                        alert('Error: ' + (result.error || 'Unknown error'));
+                    }
+                } catch (e) {
+                    alert('Could not save preset: ' + e.message);
                 }
             }
 
@@ -1045,55 +1050,25 @@
                 const name = this.presetSelect.value;
                 if (!name || !this.presets[name]) return;
 
-                // Attempt to push deletion to GitHub first
-                const newPresets = { ...this.presets };
-                delete newPresets[name];
-                const pushed = await this.pushPresetsToGitHub(newPresets);
-                if (pushed) {
-                    this.presets = newPresets;
-                    this.updatePresetMenu();
-                    this.showToast('✓ Preset deleted');
-                } else {
-                    alert('Could not delete preset - repository sync failed');
-                }
-            }
-
-            async pushPresetsToGitHub(presetsData) {
-                const config = GITHUB_CONFIG;
-                if (!config.owner || !config.repo || !config.token) return false;
-
-                const branch = config.branch || 'main';
-                const apiUrl = `https://api.github.com/repos/${config.owner}/${config.repo}/contents/presets.json`;
-                const headers = {
-                    'Authorization': `token ${config.token}`,
-                    'Accept': 'application/vnd.github.v3+json'
-                };
-
                 try {
-                    // Get current file SHA
-                    const getResp = await fetch(`${apiUrl}?ref=${branch}`, { headers });
-                    if (!getResp.ok) throw new Error(`GET failed: ${getResp.status}`);
-                    const fileData = await getResp.json();
-
-                    // PUT updated content
-                    const content = btoa(unescape(encodeURIComponent(JSON.stringify(presetsData, null, 2) + '\n')));
-                    const putResp = await fetch(apiUrl, {
-                        method: 'PUT',
-                        headers: { ...headers, 'Content-Type': 'application/json' },
+                    const resp = await fetch(GOOGLE_APPS_SCRIPT_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            message: 'Update presets',
-                            content,
-                            sha: fileData.sha,
-                            branch
+                            action: 'delete',
+                            name: name
                         })
                     });
-                    if (!putResp.ok) throw new Error(`PUT failed: ${putResp.status}`);
-
-                    // Update local cache only after successful push
-                    localStorage.setItem('csvFormatterPresetsCache', JSON.stringify(presetsData));
-                    return true;
+                    const result = await resp.json();
+                    if (result.success) {
+                        delete this.presets[name];
+                        this.updatePresetMenu();
+                        this.showToast('✓ Preset deleted');
+                    } else {
+                        alert('Error: ' + (result.error || 'Unknown error'));
+                    }
                 } catch (e) {
-                    return false;
+                    alert('Could not delete preset: ' + e.message);
                 }
             }
 
