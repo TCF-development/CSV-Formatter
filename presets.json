@@ -1,4 +1,28 @@
 {
-  "Leverancier v2": ["GMM", "Item", "Aantal", "Eenheid", "Type", "Afmeting", "Opties", "Zone linked", "Leverancier", "IN", "OUT"],
-  "Planning": ["Leverancier", "Description", "IN/OUT", "Start Day", "End Day"]
+  "Leverancier v2": [
+    "GMM",
+    "Item",
+    "Aantal",
+    "Eenheid",
+    "Type",
+    "Afmeting",
+    "Opties",
+    "Zone linked",
+    "Leverancier",
+    "IN",
+    "OUT"
+  ],
+  "Planning": [
+    "Leverancier",
+    "Description",
+    "IN/OUT",
+    "Start Day",
+    "End Day"
+  ],
+  "Sekke test": [
+    "DCO",
+    "Item",
+    "Info",
+    "Afmeting"
+  ]
 }
