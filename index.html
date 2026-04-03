@@ -492,90 +492,6 @@
             -webkit-tap-highlight-color: transparent;
         }
 
-        /* Settings modal */
-        .modal-overlay {
-            position: fixed;
-            inset: 0;
-            background: rgba(0,0,0,0.45);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-        }
-
-        .modal {
-            background: white;
-            border-radius: 8px;
-            padding: 24px;
-            width: 360px;
-            max-width: 90vw;
-            box-shadow: 0 4px 24px rgba(0,0,0,0.2);
-        }
-
-        .modal h3 {
-            margin: 0 0 6px 0;
-            font-size: 15px;
-        }
-
-        .modal p.modal-hint {
-            font-size: 12px;
-            color: #777;
-            margin: 0 0 16px 0;
-        }
-
-        .modal label {
-            display: block;
-            font-size: 12px;
-            margin-bottom: 3px;
-            color: #555;
-            font-weight: 500;
-        }
-
-        .modal input {
-            width: 100%;
-            padding: 7px 9px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            font-size: 13px;
-            margin-bottom: 11px;
-            font-family: inherit;
-        }
-
-        .modal input:focus {
-            outline: none;
-            border-color: #999;
-        }
-
-        .modal-actions {
-            display: flex;
-            justify-content: flex-end;
-            gap: 8px;
-            margin-top: 4px;
-        }
-
-        .modal-actions button {
-            padding: 8px 16px;
-            border-radius: 4px;
-            border: 1px solid #ccc;
-            cursor: pointer;
-            font-size: 13px;
-            background: white;
-        }
-
-        .modal-actions button.primary {
-            background: #D7E4BC;
-            border-color: #b8c99d;
-            font-weight: 600;
-        }
-
-        .modal-actions button:hover {
-            background: #f5f5f5;
-        }
-
-        .modal-actions button.primary:hover {
-            background: #c8d9a8;
-        }
-
         /* Toast notifications */
         .toast {
             position: fixed;
@@ -636,32 +552,22 @@
                 <button id="loadPresetBtn">Load</button>
                 <button id="savePresetBtn">Save as...</button>
                 <button id="deletePresetBtn" class="delete">Delete</button>
-                <button id="settingsBtn" title="GitHub Sync Settings" style="padding:8px 10px;">⚙</button>
             </div>
             <button class="convert-btn" id="convertBtn" disabled>Create Excel File</button>
         </div>
     </div>
 
-    <div id="settingsModal" class="modal-overlay" style="display:none">
-        <div class="modal">
-            <h3>GitHub Sync Settings</h3>
-            <p class="modal-hint">Presets are saved to <code>presets.json</code> in your GitHub repo via the Contents API. Leave blank to save locally only.</p>
-            <label>GitHub Owner (user or org)</label>
-            <input id="settingsOwner" type="text" placeholder="e.g. NickSerneels" autocomplete="off">
-            <label>Repository</label>
-            <input id="settingsRepo" type="text" placeholder="e.g. csv-formatter" autocomplete="off">
-            <label>Branch</label>
-            <input id="settingsBranch" type="text" placeholder="main">
-            <label>Personal Access Token</label>
-            <input id="settingsToken" type="password" placeholder="ghp_..." autocomplete="off">
-            <div class="modal-actions">
-                <button id="settingsCancel">Cancel</button>
-                <button id="settingsSave" class="primary">Save</button>
-            </div>
-        </div>
-    </div>
-
     <script>
+        // ── GitHub Sync config ────────────────────────────────────────────────
+        // Fill these in before deploying. The token needs Contents: write access.
+        const GITHUB_CONFIG = {
+            owner:  'TCF BV',        // e.g. 'TCF BV'
+            repo:   'CSV-Formatter',        // e.g. 'CSV-Formatter'
+            branch: 'main',
+            token:  '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'         // GitHub Personal Access Token
+        };
+        // ─────────────────────────────────────────────────────────────────────
+
         class CSVFormatter {
             constructor() {
                 this.df = null;
@@ -731,12 +637,6 @@
                 this.savePresetBtn.onclick = () => this.savePreset();
                 this.deletePresetBtn.onclick = () => this.deletePreset();
 
-                // Settings modal
-                document.getElementById('settingsBtn').onclick = () => this.openSettings();
-                document.getElementById('settingsSave').onclick = () => this.saveSettings();
-                document.getElementById('settingsCancel').onclick = () => {
-                    document.getElementById('settingsModal').style.display = 'none';
-                };
             }
 
             loadCSV(event) {
@@ -1156,14 +1056,7 @@
             }
 
             async pushPresetsToGitHub() {
-                let config;
-                try {
-                    const raw = localStorage.getItem('csvFormatterGithubConfig');
-                    config = raw ? JSON.parse(raw) : {};
-                } catch (e) {
-                    config = {};
-                }
-
+                const config = GITHUB_CONFIG;
                 if (!config.owner || !config.repo || !config.token) return false;
 
                 const branch = config.branch || 'main';
@@ -1208,31 +1101,6 @@
                 toast.textContent = message;
                 document.body.appendChild(toast);
                 setTimeout(() => toast.remove(), 3100);
-            }
-
-            openSettings() {
-                let config = {};
-                try {
-                    const raw = localStorage.getItem('csvFormatterGithubConfig');
-                    if (raw) config = JSON.parse(raw);
-                } catch (e) {}
-                document.getElementById('settingsOwner').value = config.owner || '';
-                document.getElementById('settingsRepo').value = config.repo || '';
-                document.getElementById('settingsBranch').value = config.branch || 'main';
-                document.getElementById('settingsToken').value = config.token || '';
-                document.getElementById('settingsModal').style.display = 'flex';
-            }
-
-            saveSettings() {
-                const config = {
-                    owner: document.getElementById('settingsOwner').value.trim(),
-                    repo: document.getElementById('settingsRepo').value.trim(),
-                    branch: document.getElementById('settingsBranch').value.trim() || 'main',
-                    token: document.getElementById('settingsToken').value.trim()
-                };
-                localStorage.setItem('csvFormatterGithubConfig', JSON.stringify(config));
-                document.getElementById('settingsModal').style.display = 'none';
-                this.showToast('GitHub settings saved');
             }
 
             escapeHtml(text) {
