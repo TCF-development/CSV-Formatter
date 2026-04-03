@@ -1,34 +1,6 @@
 {
-  "Leverancier v2": [
-    "GMM",
-    "Item",
-    "Aantal",
-    "Eenheid",
-    "Type",
-    "Afmeting",
-    "Opties",
-    "Zone linked",
-    "Leverancier",
-    "IN",
-    "OUT"
-  ],
-  "Planning": [
-    "Leverancier",
-    "Description",
-    "IN/OUT",
-    "Start Day",
-    "End Day"
-  ],
-  "Sekke test": [
-    "DCO",
-    "Item",
-    "Info",
-    "Afmeting"
-  ],
-  "geen idee test": [
-    "DCO",
-    "Item",
-    "Info",
-    "Afmeting"
-  ]
+  "Leverancier v2": ["GMM", "Item", "Aantal", "Eenheid", "Type", "Afmeting", "Opties", "Zone linked", "Leverancier", "IN", "OUT"],
+  "Planning": ["Leverancier", "Description", "IN/OUT", "Start Day", "End Day"],
+  "Sekke test": ["DCO", "Item", "Info", "Afmeting"],
+  "geen idee test": ["DCO", "Item", "Info", "Afmeting"]
 }
