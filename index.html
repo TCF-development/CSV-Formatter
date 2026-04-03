@@ -558,14 +558,9 @@
     </div>
 
     <script>
-        // ── GitHub Sync config ────────────────────────────────────────────────
-        const GITHUB_CONFIG = {
-            owner:  'TCF-development',
-            repo:   'CSV-Formatter',
-            branch: 'main',
-            token:  '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'
-        };
-        // ─────────────────────────────────────────────────────────────────────
+        // ── Vercel API Sync config ────────────────────────────────────────────
+        const API_URL = 'https://csv-formatter.vercel.app/api/presets';
+        // ────────────────────────────────────────────────────────────────────
 
         class CSVFormatter {
             constructor() {
@@ -601,13 +596,9 @@
 
             async fetchSharedPresets() {
                 try {
-                    const config = GITHUB_CONFIG;
-                    const apiUrl = `https://api.github.com/repos/${config.owner}/${config.repo}/contents/presets.json`;
-                    const resp = await fetch(apiUrl + '?ref=' + config.branch);
+                    const resp = await fetch(API_URL);
                     if (!resp.ok) throw new Error('fetch failed');
-                    const fileData = await resp.json();
-                    const content = atob(fileData.content);
-                    const data = JSON.parse(content);
+                    const data = await resp.json();
                     this.presets = data;
                     localStorage.setItem('csvFormatterPresetsCache', JSON.stringify(data));
                 } catch (e) {
@@ -1003,16 +994,14 @@
                 const name = prompt('Preset name:');
                 if (!name) return;
 
-                // Attempt to push to GitHub first
-                const newPresets = { ...this.presets, [name]: [...this.selectedColumns] };
-                const pushed = await this.pushPresetsToGitHub(newPresets);
-                if (pushed) {
-                    this.presets = newPresets;
+                const success = await this.syncPresetToAPI('save', name, this.selectedColumns);
+                if (success) {
+                    this.presets[name] = this.selectedColumns;
                     this.updatePresetMenu();
                     this.presetSelect.value = name;
                     this.showToast('✓ Preset saved');
                 } else {
-                    alert('Could not save preset - repository sync failed');
+                    alert('Could not save preset - sync failed');
                 }
             }
 
@@ -1049,53 +1038,31 @@
                 const name = this.presetSelect.value;
                 if (!name || !this.presets[name]) return;
 
-                // Attempt to push deletion to GitHub first
-                const newPresets = { ...this.presets };
-                delete newPresets[name];
-                const pushed = await this.pushPresetsToGitHub(newPresets);
-                if (pushed) {
-                    this.presets = newPresets;
+                const success = await this.syncPresetToAPI('delete', name);
+                if (success) {
+                    delete this.presets[name];
                     this.updatePresetMenu();
                     this.showToast('✓ Preset deleted');
                 } else {
-                    alert('Could not delete preset - repository sync failed');
+                    alert('Could not delete preset - sync failed');
                 }
             }
 
-            async pushPresetsToGitHub(presetsData) {
-                const config = GITHUB_CONFIG;
-                if (!config.owner || !config.repo || !config.token) return false;
-
-                const branch = config.branch || 'main';
-                const apiUrl = `https://api.github.com/repos/${config.owner}/${config.repo}/contents/presets.json`;
-                const headers = {
-                    'Authorization': `token ${config.token}`,
-                    'Accept': 'application/vnd.github.v3+json'
-                };
-
+            async syncPresetToAPI(action, name, columns = null) {
                 try {
-                    // Get current file SHA
-                    const getResp = await fetch(`${apiUrl}?ref=${branch}`, { headers });
-                    if (!getResp.ok) throw new Error(`GET failed: ${getResp.status}`);
-                    const fileData = await getResp.json();
-
-                    // PUT updated content
-                    const content = btoa(unescape(encodeURIComponent(JSON.stringify(presetsData, null, 2) + '\n')));
-                    const putResp = await fetch(apiUrl, {
-                        method: 'PUT',
-                        headers: { ...headers, 'Content-Type': 'application/json' },
+                    const resp = await fetch(API_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            message: 'Update presets',
-                            content,
-                            sha: fileData.sha,
-                            branch
+                            action,
+                            name,
+                            columns
                         })
                     });
-                    if (!putResp.ok) throw new Error(`PUT failed: ${putResp.status}`);
 
-                    // Update local cache only after successful push
-                    localStorage.setItem('csvFormatterPresetsCache', JSON.stringify(presetsData));
-                    return true;
+                    if (!resp.ok) throw new Error(`API failed: ${resp.status}`);
+                    const result = await resp.json();
+                    return result.success || false;
                 } catch (e) {
                     return false;
                 }
