@@ -492,6 +492,92 @@
             -webkit-tap-highlight-color: transparent;
         }
 
+        /* Modal for GitHub token */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 3000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            max-width: 450px;
+            width: 90%;
+        }
+
+        .modal-content h2 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .modal-content p {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+
+        .modal-content input {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 15px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+            font-family: monospace;
+        }
+
+        .modal-content input:focus {
+            outline: none;
+            border-color: #4CAF50;
+            box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+
+        .modal-buttons button {
+            padding: 10px 20px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            background-color: white;
+        }
+
+        .modal-buttons button:hover {
+            background-color: #f5f5f5;
+        }
+
+        .modal-buttons button.save {
+            background-color: #4CAF50;
+            color: white;
+            border-color: #45a049;
+        }
+
+        .modal-buttons button.save:hover {
+            background-color: #45a049;
+        }
+
         /* Toast notifications */
         .toast {
             position: fixed;
@@ -557,9 +643,35 @@
         </div>
     </div>
 
+    <!-- GitHub Token Modal -->
+    <div id="tokenModal" class="modal">
+        <div class="modal-content">
+            <h2>GitHub Access Required</h2>
+            <p>To save and delete presets, please provide a GitHub Personal Access Token with <strong>Contents: Read and write</strong> access to the CSV-Formatter repository.</p>
+            <p><small>Your token is only stored in your browser's session and never transmitted elsewhere.</small></p>
+            <input type="password" id="tokenInput" placeholder="Paste your GitHub token here..." autocomplete="off">
+            <div class="modal-buttons">
+                <button id="tokenCancel">Cancel</button>
+                <button id="tokenSave" class="save">Save Token</button>
+            </div>
+        </div>
+    </div>
+
     <script>
-        // ── Google Apps Script Sync config ────────────────────────────────────
-        const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/d/AKfycbzk8_xZVNmtjRuT9akYgiSFD6X44IDE2Rgu2b9sGziZgU5lhryJxpbTynQ1Xr-2SDAkIA/exec';
+        // ── GitHub Sync config ────────────────────────────────────────────────
+        const GITHUB_CONFIG = {
+            owner:  'TCF-development',
+            repo:   'CSV-Formatter',
+            branch: 'main'
+        };
+
+        function getGitHubToken() {
+            return sessionStorage.getItem('githubToken');
+        }
+
+        function setGitHubToken(token) {
+            sessionStorage.setItem('githubToken', token);
+        }
         // ─────────────────────────────────────────────────────────────────────
 
         class CSVFormatter {
@@ -596,9 +708,13 @@
 
             async fetchSharedPresets() {
                 try {
-                    const resp = await fetch(GOOGLE_APPS_SCRIPT_URL + '?action=list');
+                    const config = GITHUB_CONFIG;
+                    const apiUrl = `https://api.github.com/repos/${config.owner}/${config.repo}/contents/presets.json`;
+                    const resp = await fetch(apiUrl + '?ref=' + config.branch);
                     if (!resp.ok) throw new Error('fetch failed');
-                    const data = await resp.json();
+                    const fileData = await resp.json();
+                    const content = atob(fileData.content);
+                    const data = JSON.parse(content);
                     this.presets = data;
                     localStorage.setItem('csvFormatterPresetsCache', JSON.stringify(data));
                 } catch (e) {
@@ -990,30 +1106,26 @@
                     alert('Select columns first.');
                     return;
                 }
+
+                // Check if token is set
+                if (!getGitHubToken()) {
+                    this.showTokenModal(() => this.savePreset());
+                    return;
+                }
+
                 const name = prompt('Preset name:');
                 if (!name) return;
 
-                try {
-                    const resp = await fetch(GOOGLE_APPS_SCRIPT_URL, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            action: 'save',
-                            name: name,
-                            columns: this.selectedColumns
-                        })
-                    });
-                    const result = await resp.json();
-                    if (result.success) {
-                        this.presets[name] = this.selectedColumns;
-                        this.updatePresetMenu();
-                        this.presetSelect.value = name;
-                        this.showToast('✓ Preset saved');
-                    } else {
-                        alert('Error: ' + (result.error || 'Unknown error'));
-                    }
-                } catch (e) {
-                    alert('Could not save preset: ' + e.message);
+                // Attempt to push to GitHub first
+                const newPresets = { ...this.presets, [name]: [...this.selectedColumns] };
+                const pushed = await this.pushPresetsToGitHub(newPresets);
+                if (pushed) {
+                    this.presets = newPresets;
+                    this.updatePresetMenu();
+                    this.presetSelect.value = name;
+                    this.showToast('✓ Preset saved');
+                } else {
+                    alert('Could not save preset - repository sync failed');
                 }
             }
 
@@ -1050,26 +1162,102 @@
                 const name = this.presetSelect.value;
                 if (!name || !this.presets[name]) return;
 
+                // Check if token is set
+                if (!getGitHubToken()) {
+                    this.showTokenModal(() => this.deletePreset());
+                    return;
+                }
+
+                // Attempt to push deletion to GitHub first
+                const newPresets = { ...this.presets };
+                delete newPresets[name];
+                const pushed = await this.pushPresetsToGitHub(newPresets);
+                if (pushed) {
+                    this.presets = newPresets;
+                    this.updatePresetMenu();
+                    this.showToast('✓ Preset deleted');
+                } else {
+                    alert('Could not delete preset - repository sync failed');
+                }
+            }
+
+            async pushPresetsToGitHub(presetsData) {
+                const config = GITHUB_CONFIG;
+                const token = getGitHubToken();
+                if (!config.owner || !config.repo || !token) return false;
+
+                const branch = config.branch || 'main';
+                const apiUrl = `https://api.github.com/repos/${config.owner}/${config.repo}/contents/presets.json`;
+                const headers = {
+                    'Authorization': `token ${token}`,
+                    'Accept': 'application/vnd.github.v3+json'
+                };
+
                 try {
-                    const resp = await fetch(GOOGLE_APPS_SCRIPT_URL, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                    // Get current file SHA
+                    const getResp = await fetch(`${apiUrl}?ref=${branch}`, { headers });
+                    if (!getResp.ok) throw new Error(`GET failed: ${getResp.status}`);
+                    const fileData = await getResp.json();
+
+                    // PUT updated content
+                    const content = btoa(unescape(encodeURIComponent(JSON.stringify(presetsData, null, 2) + '\n')));
+                    const putResp = await fetch(apiUrl, {
+                        method: 'PUT',
+                        headers: { ...headers, 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            action: 'delete',
-                            name: name
+                            message: 'Update presets',
+                            content,
+                            sha: fileData.sha,
+                            branch
                         })
                     });
-                    const result = await resp.json();
-                    if (result.success) {
-                        delete this.presets[name];
-                        this.updatePresetMenu();
-                        this.showToast('✓ Preset deleted');
-                    } else {
-                        alert('Error: ' + (result.error || 'Unknown error'));
-                    }
+                    if (!putResp.ok) throw new Error(`PUT failed: ${putResp.status}`);
+
+                    // Update local cache only after successful push
+                    localStorage.setItem('csvFormatterPresetsCache', JSON.stringify(presetsData));
+                    return true;
                 } catch (e) {
-                    alert('Could not delete preset: ' + e.message);
+                    return false;
                 }
+            }
+
+            showTokenModal(callback) {
+                const modal = document.getElementById('tokenModal');
+                const tokenInput = document.getElementById('tokenInput');
+                const tokenSave = document.getElementById('tokenSave');
+                const tokenCancel = document.getElementById('tokenCancel');
+
+                // Clear previous input
+                tokenInput.value = '';
+
+                // Show modal
+                modal.classList.add('active');
+                tokenInput.focus();
+
+                const handleSave = () => {
+                    const token = tokenInput.value.trim();
+                    if (token) {
+                        setGitHubToken(token);
+                        modal.classList.remove('active');
+                        tokenSave.removeEventListener('click', handleSave);
+                        tokenCancel.removeEventListener('click', handleCancel);
+                        if (callback) callback();
+                    } else {
+                        alert('Please enter a token');
+                    }
+                };
+
+                const handleCancel = () => {
+                    modal.classList.remove('active');
+                    tokenSave.removeEventListener('click', handleSave);
+                    tokenCancel.removeEventListener('click', handleCancel);
+                };
+
+                tokenSave.addEventListener('click', handleSave);
+                tokenCancel.addEventListener('click', handleCancel);
+                tokenInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') handleSave();
+                });
             }
 
             showToast(message, type = 'success') {
