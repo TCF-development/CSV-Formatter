@@ -491,6 +491,117 @@
         button, select, input {
             -webkit-tap-highlight-color: transparent;
         }
+
+        /* Settings modal */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.45);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal {
+            background: white;
+            border-radius: 8px;
+            padding: 24px;
+            width: 360px;
+            max-width: 90vw;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.2);
+        }
+
+        .modal h3 {
+            margin: 0 0 6px 0;
+            font-size: 15px;
+        }
+
+        .modal p.modal-hint {
+            font-size: 12px;
+            color: #777;
+            margin: 0 0 16px 0;
+        }
+
+        .modal label {
+            display: block;
+            font-size: 12px;
+            margin-bottom: 3px;
+            color: #555;
+            font-weight: 500;
+        }
+
+        .modal input {
+            width: 100%;
+            padding: 7px 9px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 13px;
+            margin-bottom: 11px;
+            font-family: inherit;
+        }
+
+        .modal input:focus {
+            outline: none;
+            border-color: #999;
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            margin-top: 4px;
+        }
+
+        .modal-actions button {
+            padding: 8px 16px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+            cursor: pointer;
+            font-size: 13px;
+            background: white;
+        }
+
+        .modal-actions button.primary {
+            background: #D7E4BC;
+            border-color: #b8c99d;
+            font-weight: 600;
+        }
+
+        .modal-actions button:hover {
+            background: #f5f5f5;
+        }
+
+        .modal-actions button.primary:hover {
+            background: #c8d9a8;
+        }
+
+        /* Toast notifications */
+        .toast {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%) translateY(0);
+            padding: 9px 18px;
+            border-radius: 4px;
+            font-size: 13px;
+            color: white;
+            z-index: 2000;
+            pointer-events: none;
+            white-space: nowrap;
+            animation: toastFade 3s ease forwards;
+        }
+
+        .toast-success { background: #4caf50; }
+        .toast-warn    { background: #f57c00; }
+        .toast-error   { background: #d32f2f; }
+
+        @keyframes toastFade {
+            0%   { opacity: 0; transform: translateX(-50%) translateY(8px); }
+            12%  { opacity: 1; transform: translateX(-50%) translateY(0); }
+            75%  { opacity: 1; }
+            100% { opacity: 0; }
+        }
     </style>
 </head>
 <body>
@@ -525,25 +636,39 @@
                 <button id="loadPresetBtn">Load</button>
                 <button id="savePresetBtn">Save as...</button>
                 <button id="deletePresetBtn" class="delete">Delete</button>
+                <button id="settingsBtn" title="GitHub Sync Settings" style="padding:8px 10px;">⚙</button>
             </div>
             <button class="convert-btn" id="convertBtn" disabled>Create Excel File</button>
         </div>
     </div>
 
-    <script>
-        // Default presets from config
-        const DEFAULT_PRESETS = {
-            "Leverancier v2": ["GMM", "Item", "Aantal", "Eenheid", "Type", "Afmeting", "Opties", "Zone linked", "Leverancier", "IN", "OUT"],
-            "Planning": ["Leverancier", "Description", "IN/OUT", "Start Day", "End Day"]
-        };
+    <div id="settingsModal" class="modal-overlay" style="display:none">
+        <div class="modal">
+            <h3>GitHub Sync Settings</h3>
+            <p class="modal-hint">Presets are saved to <code>presets.json</code> in your GitHub repo via the Contents API. Leave blank to save locally only.</p>
+            <label>GitHub Owner (user or org)</label>
+            <input id="settingsOwner" type="text" placeholder="e.g. NickSerneels" autocomplete="off">
+            <label>Repository</label>
+            <input id="settingsRepo" type="text" placeholder="e.g. csv-formatter" autocomplete="off">
+            <label>Branch</label>
+            <input id="settingsBranch" type="text" placeholder="main">
+            <label>Personal Access Token</label>
+            <input id="settingsToken" type="password" placeholder="ghp_..." autocomplete="off">
+            <div class="modal-actions">
+                <button id="settingsCancel">Cancel</button>
+                <button id="settingsSave" class="primary">Save</button>
+            </div>
+        </div>
+    </div>
 
+    <script>
         class CSVFormatter {
             constructor() {
                 this.df = null;
                 this.allColumns = [];
                 this.selectedColumns = [];
                 this.colSamples = {};
-                this.presets = { ...DEFAULT_PRESETS };
+                this.presets = {};
                 this.draggedIndex = null;
                 this.csvFileDate = null;
                 this.constantColumn = null; // { name: 'ColumnName', value: 'ConstantValue' }
@@ -562,23 +687,26 @@
                 this.savePresetBtn = document.getElementById('savePresetBtn');
                 this.deletePresetBtn = document.getElementById('deletePresetBtn');
 
-                // Load saved presets from localStorage and merge with defaults
-                this.loadPresetsFromStorage();
-
-                // Setup UI
-                this.updatePresetMenu();
+                // Load shared presets from presets.json (async), then setup UI
+                this.fetchSharedPresets().then(() => {
+                    this.updatePresetMenu();
+                });
                 this.attachEventListeners();
             }
 
-            loadPresetsFromStorage() {
+            async fetchSharedPresets() {
                 try {
-                    const stored = localStorage.getItem('csvFormatterPresets');
-                    if (stored) {
-                        const customPresets = JSON.parse(stored);
-                        this.presets = { ...this.presets, ...customPresets };
-                    }
+                    const resp = await fetch('./presets.json?_=' + Date.now());
+                    if (!resp.ok) throw new Error('fetch failed');
+                    const data = await resp.json();
+                    this.presets = data;
+                    localStorage.setItem('csvFormatterPresetsCache', JSON.stringify(data));
                 } catch (e) {
-                    console.log('Could not load presets from storage');
+                    // Fallback to last cached version
+                    try {
+                        const cached = localStorage.getItem('csvFormatterPresetsCache');
+                        if (cached) this.presets = JSON.parse(cached);
+                    } catch (e2) {}
                 }
             }
 
@@ -602,6 +730,13 @@
                 this.loadPresetBtn.onclick = () => this.applyPreset();
                 this.savePresetBtn.onclick = () => this.savePreset();
                 this.deletePresetBtn.onclick = () => this.deletePreset();
+
+                // Settings modal
+                document.getElementById('settingsBtn').onclick = () => this.openSettings();
+                document.getElementById('settingsSave').onclick = () => this.saveSettings();
+                document.getElementById('settingsCancel').onclick = () => {
+                    document.getElementById('settingsModal').style.display = 'none';
+                };
             }
 
             loadCSV(event) {
@@ -956,17 +1091,23 @@
                 }
             }
 
-            savePreset() {
+            async savePreset() {
                 if (this.selectedColumns.length === 0) {
                     alert('Select columns first.');
                     return;
                 }
                 const name = prompt('Preset name:');
-                if (name) {
-                    this.presets[name] = [...this.selectedColumns];
-                    localStorage.setItem('csvFormatterPresets', JSON.stringify(this.presets));
-                    this.updatePresetMenu();
-                    this.presetSelect.value = name;
+                if (!name) return;
+
+                this.presets[name] = [...this.selectedColumns];
+                this.updatePresetMenu();
+                this.presetSelect.value = name;
+
+                const pushed = await this.pushPresetsToGitHub();
+                if (pushed) {
+                    this.showToast('Preset saved to shared file');
+                } else {
+                    this.showToast('Saved locally only — configure GitHub Sync (⚙) to share', 'warn');
                 }
             }
 
@@ -999,13 +1140,99 @@
                 this.updateLists();
             }
 
-            deletePreset() {
+            async deletePreset() {
                 const name = this.presetSelect.value;
-                if (name && this.presets[name]) {
-                    delete this.presets[name];
-                    localStorage.setItem('csvFormatterPresets', JSON.stringify(this.presets));
-                    this.updatePresetMenu();
+                if (!name || !this.presets[name]) return;
+
+                delete this.presets[name];
+                this.updatePresetMenu();
+
+                const pushed = await this.pushPresetsToGitHub();
+                if (pushed) {
+                    this.showToast('Preset deleted from shared file');
+                } else {
+                    this.showToast('Deleted locally only — configure GitHub Sync (⚙) to share', 'warn');
                 }
+            }
+
+            async pushPresetsToGitHub() {
+                let config;
+                try {
+                    const raw = localStorage.getItem('csvFormatterGithubConfig');
+                    config = raw ? JSON.parse(raw) : {};
+                } catch (e) {
+                    config = {};
+                }
+
+                if (!config.owner || !config.repo || !config.token) return false;
+
+                const branch = config.branch || 'main';
+                const apiUrl = `https://api.github.com/repos/${config.owner}/${config.repo}/contents/presets.json`;
+                const headers = {
+                    'Authorization': `token ${config.token}`,
+                    'Accept': 'application/vnd.github.v3+json'
+                };
+
+                try {
+                    // Get current file SHA
+                    const getResp = await fetch(`${apiUrl}?ref=${branch}`, { headers });
+                    if (!getResp.ok) throw new Error(`GET failed: ${getResp.status}`);
+                    const fileData = await getResp.json();
+
+                    // PUT updated content
+                    const content = btoa(unescape(encodeURIComponent(JSON.stringify(this.presets, null, 2) + '\n')));
+                    const putResp = await fetch(apiUrl, {
+                        method: 'PUT',
+                        headers: { ...headers, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            message: 'Update presets',
+                            content,
+                            sha: fileData.sha,
+                            branch
+                        })
+                    });
+                    if (!putResp.ok) throw new Error(`PUT failed: ${putResp.status}`);
+
+                    // Update local cache
+                    localStorage.setItem('csvFormatterPresetsCache', JSON.stringify(this.presets));
+                    return true;
+                } catch (e) {
+                    this.showToast('GitHub error: ' + e.message, 'error');
+                    return false;
+                }
+            }
+
+            showToast(message, type = 'success') {
+                const toast = document.createElement('div');
+                toast.className = `toast toast-${type}`;
+                toast.textContent = message;
+                document.body.appendChild(toast);
+                setTimeout(() => toast.remove(), 3100);
+            }
+
+            openSettings() {
+                let config = {};
+                try {
+                    const raw = localStorage.getItem('csvFormatterGithubConfig');
+                    if (raw) config = JSON.parse(raw);
+                } catch (e) {}
+                document.getElementById('settingsOwner').value = config.owner || '';
+                document.getElementById('settingsRepo').value = config.repo || '';
+                document.getElementById('settingsBranch').value = config.branch || 'main';
+                document.getElementById('settingsToken').value = config.token || '';
+                document.getElementById('settingsModal').style.display = 'flex';
+            }
+
+            saveSettings() {
+                const config = {
+                    owner: document.getElementById('settingsOwner').value.trim(),
+                    repo: document.getElementById('settingsRepo').value.trim(),
+                    branch: document.getElementById('settingsBranch').value.trim() || 'main',
+                    token: document.getElementById('settingsToken').value.trim()
+                };
+                localStorage.setItem('csvFormatterGithubConfig', JSON.stringify(config));
+                document.getElementById('settingsModal').style.display = 'none';
+                this.showToast('GitHub settings saved');
             }
 
             escapeHtml(text) {
