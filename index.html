@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CSV naar Excel Formatter</title>
+    <title>CSV naar Excel Formatter - V4</title>
     <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/exceljs@4.3.0/dist/exceljs.min.js"></script>
     <style>
@@ -561,7 +561,7 @@
         // ── GitHub Sync config ────────────────────────────────────────────────
         // Fill these in before deploying. The token needs Contents: write access.
         const GITHUB_CONFIG = {
-            owner:  'TCF-development',        // e.g. 'TCF BV'
+            owner:  'TCF-development',
             repo:   'CSV-Formatter',        // e.g. 'CSV-Formatter'
             branch: 'main',
             token:  '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'         // GitHub Personal Access Token
@@ -999,15 +999,16 @@
                 const name = prompt('Preset name:');
                 if (!name) return;
 
-                this.presets[name] = [...this.selectedColumns];
-                this.updatePresetMenu();
-                this.presetSelect.value = name;
-
-                const pushed = await this.pushPresetsToGitHub();
+                // Attempt to push to GitHub first
+                const newPresets = { ...this.presets, [name]: [...this.selectedColumns] };
+                const pushed = await this.pushPresetsToGitHub(newPresets);
                 if (pushed) {
-                    this.showToast('Preset saved to shared file');
+                    this.presets = newPresets;
+                    this.updatePresetMenu();
+                    this.presetSelect.value = name;
+                    this.showToast('✓ Preset saved');
                 } else {
-                    this.showToast('Saved locally only — configure GitHub Sync (⚙) to share', 'warn');
+                    alert('Could not save preset - repository sync failed');
                 }
             }
 
@@ -1044,18 +1045,20 @@
                 const name = this.presetSelect.value;
                 if (!name || !this.presets[name]) return;
 
-                delete this.presets[name];
-                this.updatePresetMenu();
-
-                const pushed = await this.pushPresetsToGitHub();
+                // Attempt to push deletion to GitHub first
+                const newPresets = { ...this.presets };
+                delete newPresets[name];
+                const pushed = await this.pushPresetsToGitHub(newPresets);
                 if (pushed) {
-                    this.showToast('Preset deleted from shared file');
+                    this.presets = newPresets;
+                    this.updatePresetMenu();
+                    this.showToast('✓ Preset deleted');
                 } else {
-                    this.showToast('Deleted locally only — configure GitHub Sync (⚙) to share', 'warn');
+                    alert('Could not delete preset - repository sync failed');
                 }
             }
 
-            async pushPresetsToGitHub() {
+            async pushPresetsToGitHub(presetsData) {
                 const config = GITHUB_CONFIG;
                 if (!config.owner || !config.repo || !config.token) return false;
 
@@ -1073,7 +1076,7 @@
                     const fileData = await getResp.json();
 
                     // PUT updated content
-                    const content = btoa(unescape(encodeURIComponent(JSON.stringify(this.presets, null, 2) + '\n')));
+                    const content = btoa(unescape(encodeURIComponent(JSON.stringify(presetsData, null, 2) + '\n')));
                     const putResp = await fetch(apiUrl, {
                         method: 'PUT',
                         headers: { ...headers, 'Content-Type': 'application/json' },
@@ -1086,11 +1089,10 @@
                     });
                     if (!putResp.ok) throw new Error(`PUT failed: ${putResp.status}`);
 
-                    // Update local cache
-                    localStorage.setItem('csvFormatterPresetsCache', JSON.stringify(this.presets));
+                    // Update local cache only after successful push
+                    localStorage.setItem('csvFormatterPresetsCache', JSON.stringify(presetsData));
                     return true;
                 } catch (e) {
-                    this.showToast('GitHub error: ' + e.message, 'error');
                     return false;
                 }
             }
