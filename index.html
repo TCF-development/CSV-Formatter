@@ -939,22 +939,26 @@
                         worksheet.columns[col].width = Math.min(maxLen + 2, 60);
                     }
 
-                    // Generate filename: GMM26 - ColumnName - Value - DDMMYYYY.xlsx
-                    // Or: GMM26 - PresetName - DDMMYYYY.xlsx if no constant column
+                    // Generate filename: EventName - ColumnName - Value - DDMMYYYY.xlsx
+                    // Or: EventName - PresetName - DDMMYYYY.xlsx if no constant column
                     const fileDate = this.csvFileDate || new Date();
-                    const year = fileDate.getFullYear().toString().slice(-2); // Get last 2 digits of year
                     const day = String(fileDate.getDate()).padStart(2, '0');
                     const month = String(fileDate.getMonth() + 1).padStart(2, '0');
                     const fullYear = fileDate.getFullYear();
 
+                    // Get event name from "Event" column in the data
+                    const eventName = (this.df.length > 0 && this.df[0]['Event'])
+                        ? String(this.df[0]['Event']).trim()
+                        : 'Export';
+
                     let filename;
                     if (constantColumn) {
                         // Use constant column name and value
-                        filename = `GMM${year} - ${constantColumn.name} - ${constantColumn.value} - ${day}${month}${fullYear}.xlsx`;
+                        filename = `${eventName} - ${constantColumn.name} - ${constantColumn.value} - ${day}${month}${fullYear}.xlsx`;
                     } else {
                         // Use preset name
                         const presetName = this.presetSelect.value || 'Export';
-                        filename = `GMM${year} - ${presetName} - ${day}${month}${fullYear}.xlsx`;
+                        filename = `${eventName} - ${presetName} - ${day}${month}${fullYear}.xlsx`;
                     }
 
                     // Write file
@@ -1160,50 +1164,16 @@
                 const str = dateString.trim();
                 if (!str) return null;
 
-                let date = null;
-
-                // ISO format: YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS
-                const isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
-                if (isoMatch) {
-                    date = new Date(isoMatch[1], parseInt(isoMatch[2]) - 1, isoMatch[3]);
-                    if (!isNaN(date)) return date;
-                }
-
-                // European format: DD/MM/YYYY or DD-MM-YYYY
-                const euMatch = str.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);
-                if (euMatch) {
-                    date = new Date(euMatch[3], parseInt(euMatch[2]) - 1, euMatch[1]);
-                    if (!isNaN(date)) return date;
-                }
-
-                // US format: MM/DD/YYYY
-                const usMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-                if (usMatch) {
-                    const day = parseInt(usMatch[2]);
-                    const month = parseInt(usMatch[1]);
-                    // Only treat as US format if month > 12, otherwise it's ambiguous
-                    if (month > 12 || day <= 12) {
-                        date = new Date(usMatch[3], month - 1, day);
-                        if (!isNaN(date)) return date;
+                // Only accept D/MM/YYYY or DD/MM/YYYY format
+                const match = str.match(/^(\d{1,2})\/(\d{2})\/(\d{4})$/);
+                if (match) {
+                    const day = parseInt(match[1], 10);
+                    const month = parseInt(match[2], 10) - 1;
+                    const year = parseInt(match[3], 10);
+                    const date = new Date(year, month, day);
+                    if (!isNaN(date) && date.getDate() === day && date.getMonth() === month && date.getFullYear() === year) {
+                        return date;
                     }
-                }
-
-                // Format: "DD Month YYYY" or "DD Month, YYYY"
-                const monthNames = ['january', 'february', 'march', 'april', 'may', 'june',
-                    'july', 'august', 'september', 'october', 'november', 'december'];
-                const monthMatch = str.match(/(\d{1,2})\s+([a-z]+)\s+(\d{4})/i);
-                if (monthMatch) {
-                    const monthIndex = monthNames.findIndex(m => m.startsWith(monthMatch[2].toLowerCase()));
-                    if (monthIndex !== -1) {
-                        date = new Date(monthMatch[3], monthIndex, monthMatch[1]);
-                        if (!isNaN(date)) return date;
-                    }
-                }
-
-                // Try native Date parsing as last resort
-                date = new Date(str);
-                if (!isNaN(date) && date.getFullYear() > 1900 && date.getFullYear() < 2100) {
-                    return date;
                 }
 
                 return null;
